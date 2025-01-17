@@ -179,8 +179,32 @@
     "name": "OpenWeather",
     "pluginKey": "OpenWeather",
     "description": "Get weather forecasts and historical data from the OpenWeather API",
-    "icon": "/assets/openweather.png",
+    "icon": "/assets/e2b_symbol.png",
     "isAuthRequired": "false",
     "authConfig": []
+  },
+  {
+    "name": "WordPress",
+    "pluginKey": "wordpress",
+    "description": "Interact with WordPress to create and manage posts.",
+    "icon": "https://i.imgur.com/RHsSG5h.png",
+    "isAuthRequired": "false",
+    "authConfig": [
+      {
+        "authField": "WORDPRESS_BASE_URL",
+        "label": "WordPress Base URL",
+        "description": "https://wordpress-1163638-5128781.cloudwaysapps.com/"
+      },
+      {
+        "authField": "WORDPRESS_USERNAME",
+        "label": "WordPress Username",
+        "description": "Enter your WordPress username."
+      },
+      {
+        "authField": "WORDPRESS_PASSWORD",
+        "label": "WordPress Password",
+        "description": "Enter your WordPress password."
+      }
+    ]
   }
 ]
