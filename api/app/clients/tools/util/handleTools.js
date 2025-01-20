@@ -188,7 +188,7 @@ const loadTools = async ({
     WebNavigator: WebNavigator,
     E2BCode: E2BCode,
     OpenWeather: OpenWeather,
-    wordpress: WordPressTool,
+    wordpresstool: WordPressTool,
   };
 
   const customConstructors = {

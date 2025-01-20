@@ -4,7 +4,7 @@ const { z } = require('zod');
 class WordPressTool extends Tool {
   constructor(fields) {
     super();
-    this.name = 'WordPressTool';
+    this.name = 'wordpresstool';
     this.description =
       'A tool to interact with WordPress. Supports creating, listing, editing, and deleting posts or pages.';
 

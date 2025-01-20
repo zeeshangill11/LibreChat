@@ -185,7 +185,7 @@
   },
   {
     "name": "WordPress",
-    "pluginKey": "wordpress",
+    "pluginKey": "wordpresstool",
     "description": "Interact with WordPress to create and manage posts.",
     "icon": "https://i.imgur.com/RHsSG5h.png",
     "isAuthRequired": "false",
