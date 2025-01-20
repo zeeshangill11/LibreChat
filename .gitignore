@@ -107,3 +107,4 @@ uploads/
 # owner
 release/
 e2btemplates.yml
+sftp-config.json

@@ -4,14 +4,14 @@ const { z } = require('zod');
 class WordPressTool extends Tool {
   constructor(fields) {
     super();
-    this.name = 'WordPressTool';
+    this.name = 'wordpresstool';
     this.description =
       'A tool to interact with WordPress. Supports creating, listing, editing, and deleting posts or pages.';
 
     // Schema for validating input arguments
     this.schema = z.object({
-      action: z.enum(['createPost', 'editPost', 'listCategories', 'listTags']).describe(
-        'The action to perform on WordPress. Supported: createPost, editPost, listCategories, listTags.'
+      action: z.enum(['createPost', 'editPost', 'listCategories', 'listTags', 'searchPosts']).describe(
+        'The action to perform on WordPress. Supported: createPost, editPost, listCategories, listTags, searchPosts.'
       ),
       postId: z.number().optional().describe('The ID of the post to edit. Required for editPost.'),
       title: z.string().min(1).optional().describe('The title of the post or page. Required for createPost and editPost.'),
@@ -24,8 +24,16 @@ class WordPressTool extends Tool {
       tags: z.array(z.number()).optional().describe('An array of tag IDs to attach to the post.'),
       categories: z.array(z.number()).optional().describe('An array of category IDs to attach to the post.'),
       date: z.string().optional().describe('The scheduled date and time in ISO 8601 format. Required for scheduling.'),
+      searchType: z
+        .enum(['contains', 'starts_with', 'ends_with'])
+        .optional()
+        .describe("Search type for title or content. Can be 'contains', 'starts_with', or 'ends_with'."),
+      searchValue: z.string().optional().describe('The value to search for in title or content.'),
+      tagId: z.number().optional().describe('The ID of the tag to filter posts.'),
+      tagName: z.string().optional().describe('The name of the tag to filter posts.'),
+      categoryId: z.number().optional().describe('The ID of the category to filter posts.'),
+      categoryName: z.string().optional().describe('The name of the category to filter posts.'),
     });
-
     // WordPress credentials
     this.baseUrl = fields.WORDPRESS_BASE_URL || process.env.WORDPRESS_BASE_URL;
     this.username = fields.WORDPRESS_USERNAME || process.env.WORDPRESS_USERNAME;
@@ -124,6 +132,89 @@ class WordPressTool extends Tool {
     return data;
   }
 
+  async getCategoryIdByName(token, categoryName) {
+    const response = await fetch(`${this.baseUrl}/wp-json/wp/v2/categories?search=${encodeURIComponent(categoryName)}`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(`Failed to fetch category ID for name "${categoryName}": ${data.message || 'Unknown error'}`);
+    }
+
+    // Return the first matching category's ID or null if no match
+    return data.length > 0 ? data[0].id : null;
+  }
+
+  async getTagIdByName(token, tagName) {
+    const response = await fetch(`${this.baseUrl}/wp-json/wp/v2/tags?search=${encodeURIComponent(tagName)}`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(`Failed to fetch tag ID for name "${tagName}": ${data.message || 'Unknown error'}`);
+    }
+
+    // Return the first matching tag's ID or null if no match
+    return data.length > 0 ? data[0].id : null;
+  }
+
+  async searchPosts(token, searchType, searchValue, tagId, tagName, categoryId, categoryName, type = 'post') {
+    const params = new URLSearchParams();
+
+    // Handle searchType and searchValue
+    if (searchType && searchValue) {
+      if (searchType === 'contains') {
+        params.append('search', searchValue);
+      } else if (searchType === 'starts_with') {
+        params.append('title', `${searchValue}*`);
+      } else if (searchType === 'ends_with') {
+        params.append('title', `*${searchValue}`);
+      }
+    }
+
+    // Fetch tag ID if tagName is provided
+    if (tagName) {
+      tagId = await this.getTagIdByName(token, tagName);
+      if (!tagId) {
+        throw new Error(`No tag found with name "${tagName}".`);
+      }
+    }
+
+    if (categoryName) {
+      categoryId = await this.getCategoryIdByName(token, categoryName);
+      if (!categoryId) {
+        throw new Error(`No category found with name "${categoryName}".`);
+      }
+    }
+
+    params.append('status', 'any'); 
+
+    if (tagId) params.append('tags', tagId);
+    if (categoryId) params.append('categories', categoryId);
+    
+    // Query posts or pages
+    const response = await fetch(`${this.baseUrl}/wp-json/wp/v2/${type}s?${params.toString()}`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(`Failed to search posts: ${data.message || 'Unknown error'}`);
+    }
+    return data;
+  }
+
   async listCategories(token) {
     const response = await fetch(`${this.baseUrl}/wp-json/wp/v2/categories`, {
       method: 'GET',
@@ -163,7 +254,8 @@ class WordPressTool extends Tool {
       }
 
       
-      const { action, title, content, status, type, tags, categories, postId, date } = validationResult.data;
+      const { action, title, content, status, type, tags, categories, postId, date, searchType, searchValue, tagId, tagName, categoryId, categoryName, } = validationResult.data;
+
 
       const token = await this.getToken();
 
@@ -200,6 +292,10 @@ class WordPressTool extends Tool {
           }
           const response = await this.deletePost(token, postId);
           return JSON.stringify({ message: 'Post deleted successfully', postId: response.id });
+        }
+        case 'searchPosts': {
+          const posts = await this.searchPosts(token, searchType, searchValue, tagId, tagName, categoryId, categoryName, type || 'post');
+          return JSON.stringify(posts.map((post) => ({ id: post.id, title: post.title.rendered })));
         }
         case 'listCategories': {
           const categories = await this.listCategories(token);
