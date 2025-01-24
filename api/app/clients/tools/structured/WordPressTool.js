@@ -9,31 +9,51 @@ class WordPressTool extends Tool {
       'A tool to interact with WordPress. Supports creating, listing, editing, and deleting posts or pages.';
 
     // Schema for validating input arguments
-    this.schema = z.object({
-      action: z.enum(['createPost', 'editPost', 'listCategories', 'listTags', 'searchPosts']).describe(
-        'The action to perform on WordPress. Supported: createPost, editPost, listCategories, listTags, searchPosts.'
+     this.schema = z.object({
+      action: z.enum([
+        'createPost', 
+        'editPost', 
+        'listCategories', 
+        'listTags', 
+        'searchPosts', 
+        'searchByMeta', 
+        'updatePostMeta', 
+        'updateCategory', 
+        'updateTag', 
+        'getPostMeta',
+        'deletePostMeta',
+        'listPaginatedPosts',
+        'listPaginatedCategories',
+        'listPaginatedTags',
+
+        'getPostContentById',
+        'getFeaturedImage'
+      ]).describe(
+        'The action to perform on WordPress.'
       ),
-      postId: z.number().optional().describe('The ID of the post to edit. Required for editPost.'),
-      title: z.string().min(1).optional().describe('The title of the post or page. Required for createPost and editPost.'),
-      content: z.string().min(1).optional().describe('The content of the post or page. Required for createPost and editPost.'),
-      status: z
-        .enum(['draft', 'publish', 'future'])
-        .optional()
-        .describe("The status of the post. Can be 'draft', 'publish', or 'future' for scheduling."),
-      type: z.enum(['post', 'page']).optional().describe("The type of content. Can be 'post' or 'page'. Defaults to 'post'."),
+      postId: z.number().optional().describe('The ID of the post to edit or update meta.'),
+      title: z.string().min(1).optional().describe('The title of the post or page.'),
+      content: z.string().min(1).optional().describe('The content of the post or page.'),
+      status: z.enum(['draft', 'publish', 'future']).optional().describe("The status of the post."),
+      type: z.enum(['post', 'page']).optional().describe("The type of content. Defaults to 'post'."),
       tags: z.array(z.number()).optional().describe('An array of tag IDs to attach to the post.'),
       categories: z.array(z.number()).optional().describe('An array of category IDs to attach to the post.'),
-      date: z.string().optional().describe('The scheduled date and time in ISO 8601 format. Required for scheduling.'),
-      searchType: z
-        .enum(['contains', 'starts_with', 'ends_with'])
-        .optional()
-        .describe("Search type for title or content. Can be 'contains', 'starts_with', or 'ends_with'."),
+      date: z.string().optional().describe('The scheduled date and time in ISO 8601 format.'),
+      searchType: z.enum(['contains', 'starts_with', 'ends_with']).optional().describe("Search type for title or content."),
       searchValue: z.string().optional().describe('The value to search for in title or content.'),
       tagId: z.number().optional().describe('The ID of the tag to filter posts.'),
-      tagName: z.string().optional().describe('The name of the tag to filter posts.'),
       categoryId: z.number().optional().describe('The ID of the category to filter posts.'),
-      categoryName: z.string().optional().describe('The name of the category to filter posts.'),
+      metaKey: z.string().optional().describe('The meta key to search or update.'),
+      metaValue: z.string().optional().describe('The meta value to search or update.'),
+      name: z.string().optional().describe('New name for category or tag for updateCategory or updateTag.'),
+      description: z.string().optional().describe('New description for category or tag for updateCategory or updateTag.'),
+      page: z.number().optional().default(1).describe('The page number for pagination.'),
+      perPage: z.number().optional().default(20).describe('The number of posts per page.'),
     });
+
+    
+
+
     // WordPress credentials
     this.baseUrl = fields.WORDPRESS_BASE_URL || process.env.WORDPRESS_BASE_URL;
     this.username = fields.WORDPRESS_USERNAME || process.env.WORDPRESS_USERNAME;
@@ -215,6 +235,76 @@ class WordPressTool extends Tool {
     return data;
   }
 
+  async searchByMeta(token, metaKey, metaValue, type = 'post') {
+    const response = await fetch(`${this.baseUrl}/wp-json/wp/v2/${type}s?meta_key=${metaKey}&meta_value=${metaValue}`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(`Failed to search by meta: ${data.message || 'Unknown error'}`);
+    }
+    return data;
+  }
+
+  async updatePostMeta(token, postId, metaKey, metaValue) {
+    const response = await fetch(`${this.baseUrl}/wp-json/custom/v1/update-meta/`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json', 
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        post_id: postId,
+        meta_key: metaKey,
+        meta_value: metaValue,
+      }),
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(`Failed to update post meta: ${data.message || 'Unknown error'}`);
+    }
+    return data;
+  }
+  async getPostMeta(token, postId) {
+    const response = await fetch(`${this.baseUrl}/wp-json/wp/v2/posts/${postId}`, {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(`Failed to fetch post meta: ${data.message || 'Unknown error'}`);
+    }
+
+    // Ensure meta is returned (requires functions.php customization)
+    return data.meta ? data.meta : { error: 'Meta not available. Ensure it is exposed in the REST API.' };
+  }
+
+  async deletePostMeta(token, postId, metaKey) {
+    const response = await fetch(`${this.baseUrl}/wp-json/custom/v1/delete-meta/`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        post_id: postId,
+        meta_key: metaKey,
+      }),
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(`Failed to delete post meta: ${data.message || 'Unknown error'}`);
+    }
+    return data;
+  }
+
   async listCategories(token) {
     const response = await fetch(`${this.baseUrl}/wp-json/wp/v2/categories`, {
       method: 'GET',
@@ -228,6 +318,60 @@ class WordPressTool extends Tool {
       throw new Error(`Failed to fetch categories: ${data.message || 'Unknown error'}`);
     }
     return data;
+  }
+
+  /*async updateCategoryOrTagDescription(token, id, description, type = 'categories') {
+      const response = await fetch(`${this.baseUrl}/wp-json/wp/v2/${type}/${id}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ description }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        return {
+          message: `${type === 'categories' ? 'Category' : 'Tag'} description updated successfully`,
+          id: data.id,
+        };
+      } else {
+        const errorData = await response.json();
+        throw new Error(`Failed to update ${type} description: ${errorData.message || 'Unknown error'}`);
+      }
+  }
+*/
+  async updateCategoryOrTag(token, id, name, description, type = 'categories') {
+      const endpoint = type === 'categories' ? '/custom/v1/update-category/' : '/custom/v1/update-tag/';
+
+      const payload = {};
+
+      if (id) payload.id = id;
+      if (name) payload.name = name;
+      if (description) payload.description = description;
+      console.log(JSON.stringify(payload))
+      const response = await fetch(`${this.baseUrl}/wp-json${endpoint}`, {
+          method: 'POST',
+          headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(payload),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+          return {
+              message: `${type === 'categories' ? 'Category' : 'Tag'} updated successfully`,
+              id: data.id,
+              name: data.name,
+              description: data.description,
+          };
+      } else {
+          throw new Error(`Failed to update ${type}: ${data.message || 'Unknown error'}`);
+      }
   }
 
   async listTags(token) {
@@ -245,6 +389,98 @@ class WordPressTool extends Tool {
     return data;
   }
 
+
+  async listPaginatedPosts(token, page = 1, perPage = 20) {
+    const response = await fetch(`${this.baseUrl}/wp-json/wp/v2/posts?page=${page}&per_page=${perPage}`, {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch paginated posts');
+    }
+
+    const data = await response.json();
+    return data;
+  }
+  
+  async listPaginatedCategories(token, page = 1, perPage = 20) {
+      const response = await fetch(`${this.baseUrl}/wp-json/wp/v2/categories?page=${page}&per_page=${perPage}`, {
+          method: 'GET',
+          headers: {
+              Authorization: `Bearer ${token}`,
+          },
+      });
+
+      if (!response.ok) {
+          throw new Error('Failed to fetch paginated categories');
+      }
+
+      const data = await response.json();
+      return data;
+  }
+
+  async listPaginatedTags(token, page = 1, perPage = 20) {
+      const response = await fetch(`${this.baseUrl}/wp-json/wp/v2/tags?page=${page}&per_page=${perPage}`, {
+          method: 'GET',
+          headers: {
+              Authorization: `Bearer ${token}`,
+          },
+      });
+
+      if (!response.ok) {
+          throw new Error('Failed to fetch paginated tags');
+      }
+
+      const data = await response.json();
+      return data;
+  }
+
+  async getPostContentById(token, postId) {
+    const response = await fetch(`${this.baseUrl}/wp-json/wp/v2/posts/${postId}`, {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch post content');
+    }
+
+    const data = await response.json();
+    return data.content.rendered;
+  }
+
+  async getFeaturedImage(token, postId) {
+      const postResponse = await fetch(`${this.baseUrl}/wp-json/wp/v2/posts/${postId}`, {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (!postResponse.ok) {
+          throw new Error('Failed to fetch post details');
+      }
+
+      const postData = await postResponse.json();
+
+      if (!postData.featured_media) {
+          return 'No featured image';
+      }
+
+      const mediaResponse = await fetch(`${this.baseUrl}/wp-json/wp/v2/media/${postData.featured_media}`, {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (!mediaResponse.ok) {
+          throw new Error('Failed to fetch featured image details');
+      }
+
+      const mediaData = await mediaResponse.json();
+
+      return mediaData.guid && mediaData.guid.rendered
+          ? mediaData.guid.rendered
+          : 'No featured image available';
+  }
   // Main function to handle tool actions
   async _call(args) {
     try {
@@ -252,11 +488,9 @@ class WordPressTool extends Tool {
       if (!validationResult.success) {
         return `Validation Error: ${JSON.stringify(validationResult.error.issues)}`;
       }
-
       
-      const { action, title, content, status, type, tags, categories, postId, date, searchType, searchValue, tagId, tagName, categoryId, categoryName, } = validationResult.data;
-
-
+      const { action, title, content, status, type, tags, categories, postId, date, searchType, searchValue,tagId, tagName, categoryId, categoryName,  metaKey, metaValue, description, name, page, perPage} = validationResult.data;
+      
       const token = await this.getToken();
 
       switch (action) {
@@ -305,6 +539,92 @@ class WordPressTool extends Tool {
           const tags = await this.listTags(token);
           return JSON.stringify(tags);
         }
+        case 'searchByMeta': {
+          if (!metaKey || !metaValue) {
+            return JSON.stringify({ error: 'Meta key and value are required for searching.' });
+          }
+          const posts = await this.searchByMeta(token, metaKey, metaValue, type || 'post');
+          return JSON.stringify(posts.map((post) => ({ id: post.id, title: post.title.rendered })));
+        }
+        case 'updatePostMeta': {
+          if (!postId || !metaKey || !metaValue) {
+            return JSON.stringify({ error: 'postId, metaKey, and metaValue are required for updating meta.' });
+          }
+          const result = await this.updatePostMeta(token, postId, metaKey, metaValue);
+          return JSON.stringify({
+            message: 'Post meta updated successfully',
+            postId: result.id,
+          });
+        }
+        case 'getPostMeta': {
+          if (!postId) {
+            return JSON.stringify({ error: 'postId is required to fetch post meta.' });
+          }
+          const meta = await this.getPostMeta(token, postId);
+          return JSON.stringify({ postId, meta });
+        }
+        case 'deletePostMeta': {
+          if (!postId || !metaKey ) {
+            return JSON.stringify({ error: 'postId is required to fetch post meta.' });
+          }
+          const result = await this.deletePostMeta(token, postId,metaKey);
+          return JSON.stringify({
+            message: 'Post meta deleted successfully',
+            postId: result.id,
+          });
+        }
+       
+
+        case 'updateCategory': {
+            if (!categoryId || (!name && !description)) {
+                return JSON.stringify({ error: 'categoryId and at least one of name or description are required.' });
+            }
+            try {
+                const result = await this.updateCategoryOrTag(token, categoryId, name, description, 'categories');
+                return JSON.stringify(result);
+            } catch (error) {
+                return JSON.stringify({ error: error.message });
+            }
+        }
+
+        case 'updateTag': {
+            
+            if (!tagId || (!name && !description)) {
+                return JSON.stringify({ error: 'tagId and at least one of name or description are required.' });
+            }
+           
+            try {
+                const result = await this.updateCategoryOrTag(token, tagId, name, description, 'tags');
+                return JSON.stringify(result);
+            } catch (error) {
+                return JSON.stringify({ error: error.message });
+            }
+        }
+
+
+        case 'listPaginatedPosts': {
+          const posts = await this.listPaginatedPosts(token, page, perPage);
+          return JSON.stringify(posts.map(post => ({ id: post.id, title: post.title.rendered })));
+        }
+        case 'getPostContentById': {
+          if (!postId) return JSON.stringify({ error: 'postId is required' });
+          const content = await this.getPostContentById(token, postId);
+          return JSON.stringify({ postId, content });
+        }
+        case 'getFeaturedImage': {
+          if (!postId) return JSON.stringify({ error: 'postId is required' });
+          const imageUrl = await this.getFeaturedImage(token, postId);
+          return JSON.stringify({ postId, imageUrl });
+        }
+        case 'listPaginatedCategories': {
+            const categories = await this.listPaginatedCategories(token, page, perPage);
+            return JSON.stringify(categories);
+        }
+        case 'listPaginatedTags': {
+            const tags = await this.listPaginatedTags(token, page, perPage);
+            return JSON.stringify(tags);
+        }
+
         default:
           return JSON.stringify({ error: `Unsupported action "${action}".` });
       }
