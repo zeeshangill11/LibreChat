@@ -25,9 +25,13 @@ class WordPressTool extends Tool {
         'listPaginatedPosts',
         'listPaginatedCategories',
         'listPaginatedTags',
-
         'getPostContentById',
-        'getFeaturedImage'
+        'getFeaturedImage',
+        'addCategory',
+        'deleteCategory',
+        'addTag',
+        'deleteTag'
+
       ]).describe(
         'The action to perform on WordPress.'
       ),
@@ -121,19 +125,19 @@ class WordPressTool extends Tool {
   }
 
  
-  async editPost(token, postId, title, content, status = 'draft', tags = [], categories = []) {
+  async editPost(token, postId, updatedFields) {
     const response = await fetch(`${this.baseUrl}/wp-json/wp/v2/posts/${postId}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ title, content, status, tags, categories }),
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(updatedFields),
     });
 
     const data = await response.json();
     if (!response.ok) {
-      throw new Error(`Failed to edit post: ${data.message || 'Unknown error'}`);
+        throw new Error(`Failed to edit post: ${data.message || 'Unknown error'}`);
     }
     return data;
   }
@@ -235,6 +239,9 @@ class WordPressTool extends Tool {
     return data;
   }
 
+
+
+
   async searchByMeta(token, metaKey, metaValue, type = 'post') {
     const response = await fetch(`${this.baseUrl}/wp-json/wp/v2/${type}s?meta_key=${metaKey}&meta_value=${metaValue}`, {
       method: 'GET',
@@ -320,37 +327,21 @@ class WordPressTool extends Tool {
     return data;
   }
 
-  /*async updateCategoryOrTagDescription(token, id, description, type = 'categories') {
-      const response = await fetch(`${this.baseUrl}/wp-json/wp/v2/${type}/${id}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ description }),
-      });
 
-      if (response.ok) {
-        const data = await response.json();
-        return {
-          message: `${type === 'categories' ? 'Category' : 'Tag'} description updated successfully`,
-          id: data.id,
-        };
-      } else {
-        const errorData = await response.json();
-        throw new Error(`Failed to update ${type} description: ${errorData.message || 'Unknown error'}`);
-      }
-  }
-*/
   async updateCategoryOrTag(token, id, name, description, type = 'categories') {
       const endpoint = type === 'categories' ? '/custom/v1/update-category/' : '/custom/v1/update-tag/';
 
+      // Prepare the payload only with provided fields
       const payload = {};
-
       if (id) payload.id = id;
       if (name) payload.name = name;
       if (description) payload.description = description;
-      console.log(JSON.stringify(payload))
+
+      // Ensure at least one field is provided for update
+      if (Object.keys(payload).length < 2) {
+          throw new Error(`At least one of name or description is required for updating ${type}.`);
+      }
+
       const response = await fetch(`${this.baseUrl}/wp-json${endpoint}`, {
           method: 'POST',
           headers: {
@@ -366,8 +357,8 @@ class WordPressTool extends Tool {
           return {
               message: `${type === 'categories' ? 'Category' : 'Tag'} updated successfully`,
               id: data.id,
-              name: data.name,
-              description: data.description,
+              name: data.name || null,
+              description: data.description || null,
           };
       } else {
           throw new Error(`Failed to update ${type}: ${data.message || 'Unknown error'}`);
@@ -385,6 +376,90 @@ class WordPressTool extends Tool {
     const data = await response.json();
     if (!response.ok) {
       throw new Error(`Failed to fetch tags: ${data.message || 'Unknown error'}`);
+    }
+    return data;
+  }
+
+
+
+
+  async addCategory(token, name, description) {
+    const response = await fetch(`${this.baseUrl}/wp-json/custom/v1/add-category/`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        name,
+        description
+      }),
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(`Failed to add category: ${data.message || 'Unknown error'}`);
+    }
+    return data;
+  }
+
+  // Function to delete a category
+  async deleteCategory(token, categoryId) {
+    const response = await fetch(`${this.baseUrl}/wp-json/custom/v1/delete-category/`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        id: categoryId
+      }),
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(`Failed to delete category: ${data.message || 'Unknown error'}`);
+    }
+    return data;
+  }
+
+  // Function to add a new tag
+  async addTag(token, name, description) {
+    const response = await fetch(`${this.baseUrl}/wp-json/custom/v1/add-tag/`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        name,
+        description
+      }),
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(`Failed to add tag: ${data.message || 'Unknown error'}`);
+    }
+    return data;
+  }
+
+  // Function to delete a tag
+  async deleteTag(token, tagId) {
+    const response = await fetch(`${this.baseUrl}/wp-json/custom/v1/delete-tag/`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        id: tagId
+      }),
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(`Failed to delete tag: ${data.message || 'Unknown error'}`);
     }
     return data;
   }
@@ -510,15 +585,28 @@ class WordPressTool extends Tool {
           });
         }
         case 'editPost': {
-          if (!postId) {
-            return JSON.stringify({ error: 'postId is required for editing a post or page.' });
-          }
-          const result = await this.editPost(token, postId, title, content, status || 'draft', tags || [], categories || []);
-          return JSON.stringify({
-            message: 'Post updated successfully',
-            id: result.id,
-            title: result.title.rendered,
-          });
+            if (!postId) {
+                return JSON.stringify({ error: 'postId is required for editing a post or page.' });
+            }
+
+            // Collect only provided fields to update
+            let updatedFields = {};
+            if (title) updatedFields.title = title;
+            if (content) updatedFields.content = content;
+            if (status) updatedFields.status = status;
+            if (tags) updatedFields.tags = tags;
+            if (categories) updatedFields.categories = categories;
+
+            if (Object.keys(updatedFields).length === 0) {
+                return JSON.stringify({ error: 'No fields provided for update.' });
+            }
+
+            const result = await this.editPost(token, postId, updatedFields);
+            return JSON.stringify({
+                message: 'Post updated successfully',
+                id: result.id,
+                updatedFields
+            });
         }
         case 'deletePost': {
           if (!postId) {
@@ -576,23 +664,31 @@ class WordPressTool extends Tool {
        
 
         case 'updateCategory': {
-            if (!categoryId || (!name && !description)) {
-                return JSON.stringify({ error: 'categoryId and at least one of name or description are required.' });
-            }
-            try {
-                const result = await this.updateCategoryOrTag(token, categoryId, name, description, 'categories');
-                return JSON.stringify(result);
-            } catch (error) {
-                return JSON.stringify({ error: error.message });
-            }
+          if (!categoryId) {
+              return JSON.stringify({ error: 'categoryId is required.' });
+          }
+          
+          if (!name && !description) {
+              return JSON.stringify({ error: 'At least one of name or description is required.' });
+          }
+
+          try {
+              const result = await this.updateCategoryOrTag(token, categoryId, name, description, 'categories');
+              return JSON.stringify(result);
+          } catch (error) {
+              return JSON.stringify({ error: error.message });
+          }
         }
 
         case 'updateTag': {
-            
-            if (!tagId || (!name && !description)) {
-                return JSON.stringify({ error: 'tagId and at least one of name or description are required.' });
+            if (!tagId) {
+                return JSON.stringify({ error: 'tagId is required.' });
             }
-           
+            
+            if (!name && !description) {
+                return JSON.stringify({ error: 'At least one of name or description is required.' });
+            }
+
             try {
                 const result = await this.updateCategoryOrTag(token, tagId, name, description, 'tags');
                 return JSON.stringify(result);
@@ -600,6 +696,31 @@ class WordPressTool extends Tool {
                 return JSON.stringify({ error: error.message });
             }
         }
+
+        case 'addCategory':
+          if (!name) return JSON.stringify({ error: 'Category name is required.' });
+          const category = await this.addCategory(token, name, description);
+          return JSON.stringify(category);
+        
+        case 'addTag':
+          if (!name) return JSON.stringify({ error: 'Tag name is required.' });
+          const tag = await this.addTag(token, name, description);
+          return JSON.stringify(tag);
+            
+        case 'deleteCategory':
+          if (!categoryId) return JSON.stringify({ error: 'Category ID is required.' });
+          const deletedCategory = await this.deleteCategory(token, categoryId);
+          return JSON.stringify(deletedCategory);
+
+        
+
+        case 'deleteTag':
+          if (!tagId) return JSON.stringify({ error: 'Tag ID is required.' });
+          const deletedTag = await this.deleteTag(token, tagId);
+          return JSON.stringify(deletedTag);
+
+
+
 
 
         case 'listPaginatedPosts': {
