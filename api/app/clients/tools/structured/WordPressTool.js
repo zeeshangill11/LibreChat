@@ -466,17 +466,26 @@ class WordPressTool extends Tool {
 
 
   async listPaginatedPosts(token, page = 1, perPage = 20) {
-    const response = await fetch(`${this.baseUrl}/wp-json/wp/v2/posts?page=${page}&per_page=${perPage}`, {
-      method: 'GET',
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    const response = await fetch(
+      `${this.baseUrl}/wp-json/wp/v2/posts?page=${page}&per_page=${perPage}`,
+      {
+        method: 'GET',
+        headers: { Authorization: `Bearer ${token}` },
+      }
+    );
 
     if (!response.ok) {
       throw new Error('Failed to fetch paginated posts');
     }
 
     const data = await response.json();
-    return data;
+
+    // Extract relevant fields, including the post status
+    return data.map((post) => ({
+      id: post.id,
+      title: post.title.rendered,
+      status: post.status, // Include post status
+    }));
   }
   
   async listPaginatedCategories(token, page = 1, perPage = 20) {
@@ -725,7 +734,13 @@ class WordPressTool extends Tool {
 
         case 'listPaginatedPosts': {
           const posts = await this.listPaginatedPosts(token, page, perPage);
-          return JSON.stringify(posts.map(post => ({ id: post.id, title: post.title.rendered })));
+          return JSON.stringify(
+            posts.map((post) => ({
+              id: post.id,
+              title: post.title,
+              status: post.status, // Return the status field
+            }))
+          );
         }
         case 'getPostContentById': {
           if (!postId) return JSON.stringify({ error: 'postId is required' });
