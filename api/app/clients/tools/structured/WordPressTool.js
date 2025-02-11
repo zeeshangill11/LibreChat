@@ -30,12 +30,15 @@ class WordPressTool extends Tool {
         'addCategory',
         'deleteCategory',
         'addTag',
-        'deleteTag'
+        'deleteTag',
+        'uploadImageFromURL',  
+        'setAIImageAsFeatured', 
+        'updateImageMeta'       
 
       ]).describe(
         'The action to perform on WordPress.'
       ),
-      postId: z.number().optional().describe('The ID of the post to edit or update meta.'),
+      postId: z.number().optional().describe('The ID of the post to edit or update meta or set featured image.'),
       title: z.string().min(1).optional().describe('The title of the post or page.'),
       content: z.string().min(1).optional().describe('The content of the post or page.'),
       status: z.enum(['draft', 'publish', 'future']).optional().describe("The status of the post."),
@@ -53,6 +56,16 @@ class WordPressTool extends Tool {
       description: z.string().optional().describe('New description for category or tag for updateCategory or updateTag.'),
       page: z.number().optional().default(1).describe('The page number for pagination.'),
       perPage: z.number().optional().default(20).describe('The number of posts per page.'),
+    
+
+      imageUrl: z.string().optional().describe('URL of the image to upload.'),
+      width: z.number().optional().describe('Width to resize the image before uploading.'),
+      height: z.number().optional().describe('Height to resize the image before uploading.'),
+      imageBase64: z.string().optional().describe('Base64-encoded image for AI-generated image uploads.'),
+      caption: z.string().optional().describe('Caption for the image.'),
+      altText: z.string().optional().describe('Alt text for the image.'),
+      mediaId: z.number().optional().describe('ID of the media image to update metadata.')
+
     });
 
     
@@ -154,6 +167,58 @@ class WordPressTool extends Tool {
       throw new Error(`Failed to delete post: ${data.message || 'Unknown error'}`);
     }
     return data;
+  }
+
+
+  async uploadImageFromURL(token, imageUrl, width = null, height = null, postId = null) {
+      const response = await fetch(`${this.baseUrl}/wp-json/custom/v1/upload-image`, {
+          method: 'POST',
+          headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ imageUrl, width, height, postId }), 
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+          throw new Error(`Failed to upload image: ${data.message || 'Unknown error'}`);
+      }
+      return data;
+  }
+
+  async setAIImageAsFeatured(token, postId, imageBase64, title, caption, altText) {
+    const response = await fetch(`${this.baseUrl}/wp-json/custom/v1/set-ai-image`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ postId, imageBase64, title, caption, altText }),
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+        throw new Error(`Failed to set AI image: ${data.message || 'Unknown error'}`);
+    }
+    return data;
+  }
+
+  async updateImageMeta(token, postId = null, mediaId = null, title, caption, altText) {
+      const response = await fetch(`${this.baseUrl}/wp-json/custom/v1/update-image-meta`, {
+          method: 'POST',
+          headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ postId, mediaId, title, caption, altText }), 
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+          throw new Error(`Failed to update image metadata: ${data.message || 'Unknown error'}`);
+      }
+      return data;
   }
 
   async getCategoryIdByName(token, categoryName) {
@@ -573,7 +638,9 @@ class WordPressTool extends Tool {
         return `Validation Error: ${JSON.stringify(validationResult.error.issues)}`;
       }
       
-      const { action, title, content, status, type, tags, categories, postId, date, searchType, searchValue,tagId, tagName, categoryId, categoryName,  metaKey, metaValue, description, name, page, perPage} = validationResult.data;
+      const { action, title, content, status, type, tags, categories, postId, date, searchType, searchValue,tagId, tagName, categoryId, categoryName,  metaKey, metaValue, description, name, page, perPage,
+      imageUrl, width, height, imageBase64, caption, altText, mediaId
+    } = validationResult.data;
       
       const token = await this.getToken();
 
@@ -759,6 +826,30 @@ class WordPressTool extends Tool {
         case 'listPaginatedTags': {
             const tags = await this.listPaginatedTags(token, page, perPage);
             return JSON.stringify(tags);
+        }
+ 
+        case 'uploadImageFromURL': {
+            if (!imageUrl || !postId) {
+                return JSON.stringify({ error: 'Image URL and postId are required.' });
+            }
+            const result = await this.uploadImageFromURL(token, imageUrl, width, height, postId);
+            return JSON.stringify(result);
+        }
+
+        case 'setAIImageAsFeatured': {
+            if (!postId || !imageBase64) {
+                return JSON.stringify({ error: 'Post ID and Image Base64 data are required.' });
+            }
+            const result = await this.setAIImageAsFeatured(token, postId, imageBase64, title, caption, altText);
+            return JSON.stringify(result);
+        }
+
+        case 'updateImageMeta': {
+            if (!postId && !mediaId) {
+                return JSON.stringify({ error: 'Either postId or mediaId is required to update image metadata.' });
+            }
+            const result = await this.updateImageMeta(token, postId, mediaId, title, caption, altText);
+            return JSON.stringify(result);
         }
 
         default:
