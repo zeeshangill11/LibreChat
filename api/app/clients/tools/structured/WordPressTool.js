@@ -33,7 +33,8 @@ class WordPressTool extends Tool {
         'deleteTag',
         'uploadImageFromURL',  
         'setAIImageAsFeatured', 
-        'updateImageMeta'       
+        'updateImageMeta',
+        'generateAndUploadAIImage'        
 
       ]).describe(
         'The action to perform on WordPress.'
@@ -58,6 +59,7 @@ class WordPressTool extends Tool {
       perPage: z.number().optional().default(20).describe('The number of posts per page.'),
     
 
+      prompt: z.string().optional().describe('Text description for generating an AI image.'), 
       imageUrl: z.string().optional().describe('URL of the image to upload.'),
       width: z.number().optional().describe('Width to resize the image before uploading.'),
       height: z.number().optional().describe('Height to resize the image before uploading.'),
@@ -630,7 +632,73 @@ class WordPressTool extends Tool {
           ? mediaData.guid.rendered
           : 'No featured image available';
   }
-  // Main function to handle tool actions
+  
+
+  async generateAndUploadAIImage(token, prompt, postId) {
+      // Step 1: Generate Image from DALL-E API
+      const dalleResponse = await fetch(`https://api.openai.com/v1/images/generations`, {
+          method: 'POST',
+          headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${process.env.OPENAI_API_KEY}` // Ensure you have this set
+          },
+          body: JSON.stringify({
+              prompt: prompt,
+              n: 1,  // Generate one image
+              size: '1024x1024'
+          })
+      });
+
+      const dalleData = await dalleResponse.json();
+      if (!dalleResponse.ok || !dalleData.data || !dalleData.data[0].url) {
+          throw new Error(`Failed to generate AI image: ${dalleData.error?.message || 'Unknown error'}`);
+      }
+
+      const imageUrl = dalleData.data[0].url;
+
+    
+      const imageResponse = await fetch(imageUrl);
+      if (!imageResponse.ok) {
+          throw new Error('Failed to download AI-generated image.');
+      }
+
+      const imageBuffer = await imageResponse.arrayBuffer();
+      const fileName = `ai-image-${Date.now()}.png`;
+
+      
+      const imageBase64 = Buffer.from(imageBuffer).toString('base64');
+
+      
+      const response = await fetch(`${this.baseUrl}/wp-json/custom/v1/set-ai-image`, {
+          method: 'POST',
+          headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ 
+              postId, 
+              imageBase64, 
+              title: "Image", 
+              caption: "", 
+              altText: "" 
+          }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+          throw new Error(`Failed to set AI image: ${data.message || 'Unknown error'}`);
+      }
+
+      return {
+          message: "AI Image uploaded successfully and set as featured",
+          imageUrl: data.image_url,
+          mediaId: data.attachment_id
+      };
+
+
+  }
+
+
   async _call(args) {
     try {
       const validationResult = this.schema.safeParse(args);
@@ -639,7 +707,7 @@ class WordPressTool extends Tool {
       }
       
       const { action, title, content, status, type, tags, categories, postId, date, searchType, searchValue,tagId, tagName, categoryId, categoryName,  metaKey, metaValue, description, name, page, perPage,
-      imageUrl, width, height, imageBase64, caption, altText, mediaId
+      imageUrl, width, height, imageBase64, caption, altText, mediaId,prompt
     } = validationResult.data;
       
       const token = await this.getToken();
@@ -849,6 +917,14 @@ class WordPressTool extends Tool {
                 return JSON.stringify({ error: 'Either postId or mediaId is required to update image metadata.' });
             }
             const result = await this.updateImageMeta(token, postId, mediaId, title, caption, altText);
+            return JSON.stringify(result);
+        }
+
+        case 'generateAndUploadAIImage': {
+            if (!postId || !prompt) {
+                return JSON.stringify({ error: 'postId and prompt are required.' });
+            }
+            const result = await this.generateAndUploadAIImage(token, prompt, postId);
             return JSON.stringify(result);
         }
 
