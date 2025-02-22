@@ -18,7 +18,8 @@ const {
   WebNavigator,
   E2BCode,
   OpenWeather,
-  WordPressTool
+  WordPressTool,
+  PortdoxTool
 
 } = require('../');
 const { primeFiles: primeCodeFiles } = require('~/server/services/Files/Code/process');
@@ -189,6 +190,7 @@ const loadTools = async ({
     E2BCode: E2BCode,
     OpenWeather: OpenWeather,
     wordpresstool: WordPressTool,
+    portdoxtool: PortdoxTool,
   };
 
   const customConstructors = {

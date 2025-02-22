@@ -207,4 +207,29 @@
       }
     ]
   }
+  ,
+  {
+    "name": "Portdox",
+    "pluginKey": "portdoxtool",
+    "description": "Portdox software AI module",
+    "icon": "https://i.imgur.com/RHsSG5h.png",
+    "isAuthRequired": "false",
+    "authConfig": [
+      {
+        "authField": "PORTDOX_BASE_URL",
+        "label": "Portdox Base URL",
+        "description": "https://wordpress-1163638-5128781.cloudwaysapps.com/"
+      },
+      {
+        "authField": "PORTDOX_USERNAME",
+        "label": "Portdox Username",
+        "description": "Enter your Portdox username."
+      },
+      {
+        "authField": "PORTDOX_PASSWORD",
+        "label": "Portdox Password",
+        "description": "Enter your Portdox password."
+      }
+    ]
+  }
 ]
