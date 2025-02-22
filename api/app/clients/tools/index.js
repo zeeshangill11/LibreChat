@@ -9,6 +9,8 @@ const GoogleSearchAPI = require('./structured/GoogleSearch');
 const TraversaalSearch = require('./structured/TraversaalSearch');
 const TavilySearchResults = require('./structured/TavilySearchResults');
 const WordPressTool = require('./structured/WordPressTool');
+const PortdoxTool = require('./structured/PortdoxTool');
+
 const OpenWeather = require('./structured/OpenWeather');
 
 module.exports = {
@@ -21,7 +23,7 @@ module.exports = {
   TraversaalSearch,
   StructuredWolfram,
   TavilySearchResults,
- 
+  PortdoxTool,
   WordPressTool,
   OpenWeather,
 };
